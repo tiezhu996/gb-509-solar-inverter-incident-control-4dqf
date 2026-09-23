@@ -21,6 +21,7 @@ func (h *FaultEventHandler) Register(group *gin.RouterGroup) {
 	resource.GET("", h.list)
 	resource.GET("/:id", h.get)
 	resource.POST("", middleware.RequireMinimumRole("operator"), h.create)
+	resource.POST("/batch-claim", middleware.RequireMinimumRole("operator"), h.batchClaim)
 	resource.PUT("/:id", middleware.RequireMinimumRole("operator"), h.update)
 	resource.POST("/:id/transition", middleware.RequireMinimumRole("operator"), h.transition)
 	resource.DELETE("/:id", middleware.RequireRoles("admin"), h.remove)
@@ -97,6 +98,20 @@ func (h *FaultEventHandler) transition(c *gin.Context) {
 		return
 	}
 	util.OK(c, item)
+}
+
+func (h *FaultEventHandler) batchClaim(c *gin.Context) {
+	var input dto.BatchClaimFaultRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		util.Fail(c, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := h.service.BatchClaim(c.Request.Context(), input, actorFromContext(c), requestIDFromContext(c))
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+	util.OK(c, result)
 }
 
 func (h *FaultEventHandler) remove(c *gin.Context) {

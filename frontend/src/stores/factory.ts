@@ -21,7 +21,8 @@ export function createEntityStore() {
       set({ loading: true, error: '' });
       try {
         const result = await request<DomainRecord[]>(`/${path}?page=1&pageSize=20&search=${encodeURIComponent(search)}`);
-        set({ items: result.data, meta: result.meta || { page: 1, pageSize: 20, total: result.data.length }, loading: false });
+        const pageMeta = result.meta && 'page' in result.meta ? result.meta : { page: 1, pageSize: 20, total: result.data.length };
+        set({ items: result.data, meta: pageMeta, loading: false });
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error), loading: false }); }
     },
     createRecord: async (path, input) => {

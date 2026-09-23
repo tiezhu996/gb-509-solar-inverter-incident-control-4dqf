@@ -1,6 +1,6 @@
 
 import { request } from './client';
-import type { DomainRecord } from '../types/domain';
+import type { BatchClaimRequest, BatchClaimResult, DomainRecord } from '../types/domain';
 
 export async function listFaultEvent(page = 1, pageSize = 20, search = '') {
   return request<DomainRecord[]>(`/faults?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`);
@@ -12,4 +12,7 @@ export async function transitionFaultEvent(id: number, status: string, expectedV
   return request<DomainRecord>(`/faults/${id}/transition`, {
     method: 'POST', body: JSON.stringify({ status, expectedVersion, reason }),
   });
+}
+export async function batchClaimFaultEvents(input: BatchClaimRequest) {
+  return request<BatchClaimResult>('/faults/batch-claim', { method: 'POST', body: JSON.stringify(input) });
 }

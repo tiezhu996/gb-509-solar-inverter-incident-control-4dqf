@@ -29,6 +29,12 @@ func Fail(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, Envelope{Error: code, Message: message})
 }
 
+// FailWithMeta carries structured details (for example per-item batch
+// rejection reasons) alongside the error envelope.
+func FailWithMeta(c *gin.Context, status int, code, message string, meta any) {
+	c.AbortWithStatusJSON(status, Envelope{Error: code, Message: message, Meta: meta})
+}
+
 func Page(c *gin.Context, data any, page, pageSize int, total int64) {
 	c.JSON(http.StatusOK, Envelope{
 		Data: data,

@@ -18,17 +18,19 @@ type FaultEventService interface {
 	Create(context.Context, dto.CreateFaultEvent, string, string) (model.FaultEvent, error)
 	Update(context.Context, uint, dto.UpdateFaultEvent, string, string) (model.FaultEvent, error)
 	Transition(context.Context, uint, dto.TransitionRequest, string, string) (model.FaultEvent, error)
+	BatchClaim(context.Context, dto.BatchClaimFaultRequest, string, string) (dto.BatchClaimFaultResult, error)
 	Delete(context.Context, uint, string, string) error
 	StatusCounts(context.Context) (map[string]int64, error)
 }
 
 type faultEventService struct {
 	repository repository.FaultEventRepository
+	batch      repository.BatchClaimRepository
 	security   SecurityService
 }
 
-func NewFaultEventService(repo repository.FaultEventRepository, security SecurityService) FaultEventService {
-	return &faultEventService{repository: repo, security: security}
+func NewFaultEventService(repo repository.FaultEventRepository, batch repository.BatchClaimRepository, security SecurityService) FaultEventService {
+	return &faultEventService{repository: repo, batch: batch, security: security}
 }
 
 func (s *faultEventService) List(ctx context.Context, query dto.PageQuery) (repository.Page[model.FaultEvent], error) {

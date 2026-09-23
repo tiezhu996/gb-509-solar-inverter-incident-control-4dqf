@@ -15,6 +15,21 @@ export function getSession(): UserSession | null {
 export function saveSession(session: unknown): void { localStorage.setItem(TOKEN_KEY, JSON.stringify(session)); }
 export function clearSession(): void { localStorage.removeItem(TOKEN_KEY); }
 
+// ApiError keeps the structured error code and optional meta payload (used by
+// 批量认领 to return per-item 阻断明细) for callers that need more than a message.
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  meta?: unknown;
+  constructor(status: number, code: string, message: string, meta?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.meta = meta;
+  }
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<ApiEnvelope<T>> {
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
@@ -24,6 +39,6 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   const response = await fetch(`/api${path}`, { ...init, headers });
   if (response.status === 204) return { data: undefined as T };
   const payload = await response.json().catch(() => ({ error: 'invalid_response', message: '服务返回了无法解析的响应' }));
-  if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+  if (!response.ok) throw new ApiError(response.status, payload.error || `HTTP ${response.status}`, payload.message || payload.error || `HTTP ${response.status}`, payload.meta);
   return payload as ApiEnvelope<T>;
 }
