@@ -27,3 +27,17 @@ export interface AuditLog {
   entityId: number; beforeState: string; afterState: string; detail: string; createdAt: string;
 }
 export interface EntityConfig { key: string; path: string; label: string; statuses: readonly string[] }
+
+export interface BatchClaimItem { code: string; expectedVersion: number }
+export interface BatchClaimBlock { code: string; reason: string }
+export interface BatchClaimFault { id: number; code: string; version: number }
+export interface BatchClaimInverterChange {
+  id: number; code: string; facility: string; fromStatus: string; toStatus: string; version: number;
+}
+export interface BatchClaimResult {
+  claimedFaults: BatchClaimFault[];
+  inverterChanges: BatchClaimInverterChange[];
+  affectedFacilities: string[];
+  faultAuditCount: number;
+  inverterAuditCount: number;
+}

@@ -32,6 +32,7 @@ docker compose down -v --remove-orphans
 | 处置动作 | `MitigationAction` | `/api/actions` | draft, confirmed, executing, completed, failed |
 
 - JWT 登录和 viewer/operator/reviewer/admin 四级 RBAC；后端写路由中间件、前端路由守卫和按钮权限保持一致。
+- 故障事件支持批量认领（`POST /api/faults/batch-claim`，单次最多 20 条、统一原因）：仅待认领故障可提交，编号不存在、异常状态或旧版本都会逐条返回阻断原因并整批回滚；成功后同一场站跳闸逆变器在同一事务内联动转为告警，每项变化均写审计。
 - 所有状态变化使用乐观锁并写入不可覆盖的审计日志。
 - 故障与处置页共用 `ActionDrawer`；远程处置先经过迁移复核，再勾选设备、影响范围和回退方案，后端同时校验二次确认标记。
 - `SeverityTag` 在逆变器与故障页共用，统一展示设备状态和风险等级。

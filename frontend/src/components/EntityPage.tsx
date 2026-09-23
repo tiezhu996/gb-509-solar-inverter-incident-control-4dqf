@@ -9,7 +9,11 @@ import { ConfirmDialog } from './common/ConfirmDialog';
 import { UiButton } from './common/UiButton';
 import { SeverityTag } from './common/SeverityTag';
 import { ActionDrawer } from './common/ActionDrawer';
+import { BatchClaimDialog } from './common/BatchClaimDialog';
 import { getSession } from '../api/client';
+
+const BATCH_CLAIM_MAX = 20;
+const CLAIMABLE_STATUS = 'open';
 
 export function EntityPage({ config, useStore }: { config: EntityConfig; useStore: EntityStore }) {
   const { items, meta, loading, error, load, createRecord, transition } = useStore();
@@ -17,10 +21,59 @@ export function EntityPage({ config, useStore }: { config: EntityConfig; useStor
   const [showCreate, setShowCreate] = useState(false);
   const [pending, setPending] = useState<{ item: DomainRecord; status: string } | null>(null);
   const [remoteConfirm, setRemoteConfirm] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchItems, setBatchItems] = useState<DomainRecord[]>([]);
   const role = getSession()?.role || 'viewer';
   const canWrite = ['operator', 'reviewer', 'admin'].includes(role);
   const isRemoteAction = ['faultEvent', 'mitigationAction'].includes(config.key);
+  const batchClaimEnabled = config.key === 'faultEvent';
   useEffect(() => { void load(config.path); }, [config.path, load]);
+
+  // Drop stale selections after the list refreshes (claimed faults leave the
+  // open state and are no longer eligible).
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const valid = new Set(items.filter((item) => item.status === CLAIMABLE_STATUS).map((item) => item.id));
+      const next = new Set<number>();
+      current.forEach((id) => { if (valid.has(id)) next.add(id); });
+      return next.size === current.size ? current : next;
+    });
+  }, [items]);
+
+  const claimableItems = useMemo(() => items.filter((item) => item.status === CLAIMABLE_STATUS), [items]);
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIds.has(item.id)),
+    [items, selectedIds],
+  );
+  const allClaimableSelected = claimableItems.length > 0 && claimableItems.every((item) => selectedIds.has(item.id));
+
+  const toggleSelected = (item: DomainRecord) => {
+    if (!canWrite || item.status !== CLAIMABLE_STATUS) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else if (next.size < BATCH_CLAIM_MAX) next.add(item.id);
+      return next;
+    });
+  };
+  const toggleSelectAllClaimable = () => {
+    setSelectedIds((current) => {
+      if (allClaimableSelected) return new Set();
+      const next = new Set(current);
+      for (const item of claimableItems) {
+        if (next.size >= BATCH_CLAIM_MAX) break;
+        next.add(item.id);
+      }
+      return next;
+    });
+  };
+  const openBatchDialog = () => {
+    setBatchItems(selectedItems);
+    setBatchOpen(true);
+  };
+
   const highRisk = useMemo(() => items.filter((item) => ['high', 'critical'].includes(item.riskLevel)).length, [items]);
   const createDemo = async () => {
     const now = Date.now();
@@ -34,18 +87,27 @@ export function EntityPage({ config, useStore }: { config: EntityConfig; useStor
     try { await transition(config.path, pending.item, pending.status); setPending(null); setRemoteConfirm(false); }
     catch { setRemoteConfirm(false); }
   };
+  const columnCount = 8 + (batchClaimEnabled ? 1 : 0);
   return <main className="workspace">
     <header className="page-header"><div><p className="eyebrow">业务工作台</p><h1>{config.label}</h1><p>统一管理{config.label}的状态、风险、证据与责任人。</p></div>{canWrite && <UiButton onClick={() => setShowCreate(true)}>新增{config.label}</UiButton>}</header>
     <section className="metrics"><MetricCard label="记录总数" value={meta.total} detail="当前筛选范围"/><MetricCard label="高风险" value={highRisk} detail="需要优先复核"/><MetricCard label="状态种类" value={new Set(items.map((item) => item.status)).size} detail="状态机覆盖"/></section>
     {['inverterUnit', 'faultEvent'].includes(config.key) && <SeverityTag records={items} />}
     <section className="toolbar"><input aria-label="搜索" placeholder={`搜索${config.label}编码或名称`} value={search} onChange={(event) => setSearch(event.target.value)} /><UiButton onClick={() => void load(config.path, search)}>查询</UiButton><button className="link-button" onClick={() => { setSearch(''); void load(config.path); }}>重置</button></section>
+    {batchClaimEnabled && canWrite && <section className="batch-bar">
+      <label className="batch-bar__select-all"><input type="checkbox" aria-label="全选本页待认领" checked={allClaimableSelected} onChange={toggleSelectAllClaimable} disabled={claimableItems.length === 0} />本页待认领全选</label>
+      <span>已勾选 <strong>{selectedIds.size}</strong> / {BATCH_CLAIM_MAX} 条（仅待认领 open 可勾选）</span>
+      <UiButton onClick={openBatchDialog} disabled={selectedIds.size === 0}>批量认领</UiButton>
+      {selectedIds.size > 0 && <button className="link-button" onClick={() => setSelectedIds(new Set())}>清空勾选</button>}
+      {selectedIds.size >= BATCH_CLAIM_MAX && <small className="batch-bar__limit">已达单次上限 {BATCH_CLAIM_MAX} 条</small>}
+    </section>}
     {error && <div className="alert" role="alert">{error}</div>}
-    <section className="table-shell" aria-busy={loading}><table><thead><tr><th>编码</th><th>名称</th><th>状态</th><th>风险</th><th>责任人</th><th>指标</th><th>更新时间</th><th>操作</th></tr></thead><tbody>
-      {items.map((item) => { const next = nextStatus(item.status, config.statuses); return <tr key={item.id}><td><strong>{item.code}</strong></td><td>{item.name}<small>{item.facility}</small></td><td><StatusBadge status={item.status}/></td><td>{item.riskLevel}</td><td>{item.owner}</td><td>{item.metricValue} {item.metricUnit}</td><td>{formatDate(item.updatedAt)}</td><td>{next ? <button className="table-action" disabled={!canWrite} onClick={() => setPending({ item, status: next })}>{canWrite ? '推进至' : '无权限推进至'} {next}</button> : <span className="muted">流程结束</span>}</td></tr>; })}
-      {!items.length && !loading && <tr><td colSpan={8} className="empty">暂无记录</td></tr>}
+    <section className="table-shell" aria-busy={loading}><table><thead><tr>{batchClaimEnabled && <th className="col-check">勾选</th>}<th>编码</th><th>名称</th><th>状态</th><th>风险</th><th>责任人</th><th>指标</th><th>更新时间</th><th>操作</th></tr></thead><tbody>
+      {items.map((item) => { const next = nextStatus(item.status, config.statuses); const checked = selectedIds.has(item.id); const checkable = batchClaimEnabled && canWrite && item.status === CLAIMABLE_STATUS; return <tr key={item.id} className={checked ? 'row-selected' : ''}>{batchClaimEnabled && <td className="col-check"><input type="checkbox" aria-label={`勾选 ${item.code}`} checked={checked} disabled={!checkable} onChange={() => toggleSelected(item)} /></td>}<td><strong>{item.code}</strong></td><td>{item.name}<small>{item.facility}</small></td><td><StatusBadge status={item.status}/></td><td>{item.riskLevel}</td><td>{item.owner}</td><td>{item.metricValue} {item.metricUnit}</td><td>{formatDate(item.updatedAt)}</td><td>{next ? <button className="table-action" disabled={!canWrite} onClick={() => setPending({ item, status: next })}>{canWrite ? '推进至' : '无权限推进至'} {next}</button> : <span className="muted">流程结束</span>}</td></tr>; })}
+      {!items.length && !loading && <tr><td colSpan={columnCount} className="empty">暂无记录</td></tr>}
     </tbody></table>{loading && <div className="loading">正在同步业务数据…</div>}</section>
     <ConfirmDialog open={showCreate} title={`新增${config.label}`} onCancel={() => setShowCreate(false)} onConfirm={() => { void createDemo().catch(() => undefined); }}><p>将创建一条包含完整责任人、风险和证据信息的演示记录。</p></ConfirmDialog>
     <ConfirmDialog open={Boolean(pending) && !remoteConfirm} title="确认状态迁移" onCancel={() => setPending(null)} onConfirm={() => { if (isRemoteAction) setRemoteConfirm(true); else void finalizeTransition(); }}><p>状态迁移会写入审计日志，且使用版本号避免并发覆盖。</p><strong>{pending?.item.status} → {pending?.status}</strong></ConfirmDialog>
     <ActionDrawer open={remoteConfirm} item={pending?.item || null} target={pending?.status || ''} onCancel={() => setRemoteConfirm(false)} onConfirm={() => void finalizeTransition()} />
+    {batchClaimEnabled && <BatchClaimDialog open={batchOpen} items={batchItems} onClose={() => setBatchOpen(false)} onCommitted={() => load(config.path, search)} />}
   </main>;
 }

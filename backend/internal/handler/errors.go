@@ -12,7 +12,12 @@ import (
 )
 
 func handleError(c *gin.Context, err error) {
+	var batchRejected *service.BatchClaimRejectedError
 	switch {
+	case errors.As(err, &batchRejected):
+		util.FailDetails(c, http.StatusConflict, "batch_claim_rejected",
+			"批量认领被拒绝：存在不可认领的编号，整批未发生变更",
+			gin.H{"blocks": batchRejected.Blocks})
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		util.Fail(c, http.StatusNotFound, "not_found", "record was not found")
 	case errors.Is(err, repository.ErrVersionConflict):

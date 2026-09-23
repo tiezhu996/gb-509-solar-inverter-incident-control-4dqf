@@ -16,6 +16,8 @@ type InverterUnitRepository interface {
 	Update(context.Context, uint, uint, *model.InverterUnit) error
 	Delete(context.Context, uint) error
 	CountByStatus(context.Context) (map[string]int64, error)
+	ListByFacilityAndStatus(context.Context, []string, string) ([]model.InverterUnit, error)
+	AdvanceStatusByID(context.Context, uint, string, string) error
 }
 
 type inverterUnitRepository struct {
@@ -43,4 +45,10 @@ func (r *inverterUnitRepository) Delete(ctx context.Context, id uint) error {
 }
 func (r *inverterUnitRepository) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	return r.store.CountByStatus(ctx)
+}
+func (r *inverterUnitRepository) ListByFacilityAndStatus(ctx context.Context, facilities []string, status string) ([]model.InverterUnit, error) {
+	return r.store.ListByFacilityAndStatus(ctx, facilities, status)
+}
+func (r *inverterUnitRepository) AdvanceStatusByID(ctx context.Context, id uint, expectedStatus, status string) error {
+	return r.store.AdvanceStatusByID(ctx, id, expectedStatus, status)
 }

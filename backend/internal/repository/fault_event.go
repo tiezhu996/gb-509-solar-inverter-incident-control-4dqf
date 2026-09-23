@@ -16,6 +16,8 @@ type FaultEventRepository interface {
 	Update(context.Context, uint, uint, *model.FaultEvent) error
 	Delete(context.Context, uint) error
 	CountByStatus(context.Context) (map[string]int64, error)
+	ListByCodes(context.Context, []string) ([]model.FaultEvent, error)
+	AdvanceStatus(context.Context, uint, uint, string, string) error
 }
 
 type faultEventRepository struct {
@@ -43,4 +45,10 @@ func (r *faultEventRepository) Delete(ctx context.Context, id uint) error {
 }
 func (r *faultEventRepository) CountByStatus(ctx context.Context) (map[string]int64, error) {
 	return r.store.CountByStatus(ctx)
+}
+func (r *faultEventRepository) ListByCodes(ctx context.Context, codes []string) ([]model.FaultEvent, error) {
+	return r.store.ListByCodes(ctx, codes)
+}
+func (r *faultEventRepository) AdvanceStatus(ctx context.Context, id, expectedVersion uint, expectedStatus, status string) error {
+	return r.store.AdvanceStatus(ctx, id, expectedVersion, expectedStatus, status)
 }
